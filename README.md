@@ -143,15 +143,19 @@ Request:
 }
 ```
 
-### `GET /api/check-existing-user-verification`
+### `GET` or `POST /api/check-existing-user-verification`
 
-Checks if the signed-in PocketBase user is verified either in PocketBase or in this external verification service.
+Checks if the signed-in PocketBase user or provided email is verified either in PocketBase or in this external verification service.
 
-Headers:
+Preferred request body when PocketBase auth refresh is unavailable:
 
-```text
-Authorization: Bearer <pocketbase-auth-token>
+```json
+{
+  "email": "player@example.com"
+}
 ```
+
+You may also send `Authorization: Bearer <pocketbase-auth-token>`, but this service no longer depends on PocketBase token refresh for the external verification workaround.
 
 ## Signup Frontend Flow
 

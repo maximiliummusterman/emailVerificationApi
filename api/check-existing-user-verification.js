@@ -1,5 +1,5 @@
-import { getAuthToken, handleCors, json, methodNotAllowed, serverError } from '../lib/http.js';
-import { createRequestLogger, maskEmail } from '../lib/logger.js';
+import { getAuthToken, handleCors, json, methodNotAllowed, readJson, serverError } from '../lib/http.js';
+import { createRequestLogger, maskEmail, safeBody } from '../lib/logger.js';
 import { refreshPocketBaseAuth } from '../lib/pocketbase.js';
 import { normalizeEmail } from '../lib/security.js';
 import { isExternalUserVerified } from '../lib/verificationStore.js';
@@ -16,19 +16,36 @@ export default async function handler(req, res) {
 
   try {
     const authToken = getAuthToken(req);
+    let email = '';
+    let userId = '';
+    let pocketBaseVerified = false;
 
-    if (!authToken) {
-      logger.warn('missing_auth_token');
-      return json(res, 401, { success: false, error: 'Missing PocketBase auth token.' });
+    if (req.method === 'POST') {
+      const body = await readJson(req);
+      logger.log('request_body_parsed', { body: safeBody(body) });
+      email = normalizeEmail(body.email);
     }
 
-    const authData = await refreshPocketBaseAuth(authToken);
-    const record = authData.record;
-    const email = normalizeEmail(record.email);
-    const externallyVerified = await isExternalUserVerified(record.id, email);
-    const pocketBaseVerified = record.verified === true;
+    if (authToken) {
+      try {
+        const authData = await refreshPocketBaseAuth(authToken);
+        const record = authData.record;
+        email = normalizeEmail(record.email);
+        userId = record.id;
+        pocketBaseVerified = record.verified === true;
+        logger.log('pocketbase_auth_refreshed', { userId, email: maskEmail(email), pocketBaseVerified });
+      } catch (error) {
+        logger.warn('pocketbase_auth_refresh_failed_using_email_fallback', { error: error.message, email: email ? maskEmail(email) : '' });
+      }
+    }
+
+    if (!email) {
+      return json(res, 401, { success: false, error: 'Missing email or valid PocketBase auth token.' });
+    }
+
+    const externallyVerified = await isExternalUserVerified(userId, email);
     logger.log('verification_status_loaded', {
-      userId: record.id,
+      userId: userId || null,
       email: maskEmail(email),
       pocketBaseVerified,
       externallyVerified
@@ -39,15 +56,11 @@ export default async function handler(req, res) {
       verified: pocketBaseVerified || externallyVerified,
       pocketBaseVerified,
       externallyVerified,
-      userId: record.id,
+      userId: userId || null,
       email
     });
   } catch (error) {
     logger.error('request_failed', error);
-
-    if (error.status === 401 || error.status === 403) {
-      return json(res, error.status, { success: false, error: 'Invalid PocketBase auth token.' });
-    }
 
     return serverError(res, error.message);
   }
