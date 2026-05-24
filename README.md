@@ -24,7 +24,7 @@ UPSTASH_REDIS_REST_URL=https://your-database.upstash.io
 UPSTASH_REDIS_REST_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 CODE_PEPPER=generate-a-long-random-secret
 POCKETBASE_URL=https://guandan.de/hcgi/platform
-ALLOWED_ORIGINS=https://guandan.de,https://www.guandan.de,http://localhost:3000,http://localhost:5173
+ALLOWED_ORIGINS=https://guandan.de,https://www.guandan.de,https://164361ea-3280-4df4-963e-f7be8de4b15a.app-preview.com,http://localhost:3000,http://localhost:5173
 ```
 
 Optional tuning:
@@ -186,7 +186,21 @@ Important limitation: PocketBase itself will not know about this external verifi
 2. Add the environment variables above.
 3. Deploy.
 4. Optionally add a custom domain such as `verify.guandan.de`.
-5. Set `ALLOWED_ORIGINS` to your production frontend origin.
+5. Set `ALLOWED_ORIGINS` to your production frontend origin and any preview origins you use.
+
+For your current Hostinger preview, include:
+
+```text
+https://164361ea-3280-4df4-963e-f7be8de4b15a.app-preview.com
+```
+
+The API also supports wildcard origins such as:
+
+```text
+https://*.app-preview.com
+```
+
+After changing Vercel environment variables, redeploy the API.
 
 If deploying from the full Guandan repository, set Vercel's Project Settings -> Build and Development Settings -> Root Directory to `email-verification-api`. If the root directory is wrong, Vercel will deploy the wrong folder and every `/api/...` endpoint will return `404: NOT_FOUND`.
 
