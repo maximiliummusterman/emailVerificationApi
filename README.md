@@ -188,6 +188,18 @@ Important limitation: PocketBase itself will not know about this external verifi
 4. Optionally add a custom domain such as `verify.guandan.de`.
 5. Set `ALLOWED_ORIGINS` to your production frontend origin.
 
+If deploying from the full Guandan repository, set Vercel's Project Settings -> Build and Development Settings -> Root Directory to `email-verification-api`. If the root directory is wrong, Vercel will deploy the wrong folder and every `/api/...` endpoint will return `404: NOT_FOUND`.
+
+After deployment, test:
+
+```text
+https://your-vercel-domain.vercel.app/api/health
+```
+
+The project also rewrites `/` to `/api/health`, so the base URL should return the same health response after redeploying this version.
+
+The health response includes safe configuration checks like `hasResendApiKey` and `hasUpstashToken`. It does not expose secret values.
+
 ## Security Notes
 
 - Rotate any Resend API key that was pasted into chat or frontend code.
@@ -196,4 +208,35 @@ Important limitation: PocketBase itself will not know about this external verifi
 - Codes are stored as HMAC hashes, not plaintext.
 - Verification tokens are one-time server-side tokens stored in Redis.
 - Rate limits are enforced per email and per IP.
-# emailVerificationApi
+
+## Debugging Logs
+
+Frontend logs are written to the browser console with the prefix:
+
+```text
+[email-verification]
+```
+
+These logs show the endpoint URL, HTTP status, duration, and sanitized response. Passwords, codes, auth tokens, and verification tokens are redacted.
+
+Server logs are written to Vercel Function Logs as JSON lines. In Vercel, open:
+
+```text
+Project -> Logs
+```
+
+Look for events such as:
+
+```text
+request_start
+request_body_parsed
+verification_saved
+resend_send_start
+resend_send_success
+code_valid
+pocketbase_create_user_start
+pocketbase_request_failed
+request_failed
+```
+
+Each request has a `requestId` so you can follow one request across all log lines. Secrets and raw codes are not logged.

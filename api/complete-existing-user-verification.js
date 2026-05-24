@@ -1,5 +1,6 @@
 import { verificationConfig } from '../lib/config.js';
 import { badRequest, getAuthToken, handleCors, json, methodNotAllowed, readJson, serverError } from '../lib/http.js';
+import { createRequestLogger, maskEmail, safeBody } from '../lib/logger.js';
 import { refreshPocketBaseAuth } from '../lib/pocketbase.js';
 import { normalizeEmail } from '../lib/security.js';
 import {
@@ -9,6 +10,9 @@ import {
 } from '../lib/verificationStore.js';
 
 export default async function handler(req, res) {
+  const logger = createRequestLogger(req, 'complete-existing-user-verification');
+  logger.log('request_start');
+
   if (handleCors(req, res)) return;
 
   if (req.method !== 'POST') {
@@ -19,10 +23,13 @@ export default async function handler(req, res) {
     const authToken = getAuthToken(req);
 
     if (!authToken) {
+      logger.warn('missing_auth_token');
       return json(res, 401, { success: false, error: 'Missing PocketBase auth token.' });
     }
 
     const body = await readJson(req);
+    logger.log('request_body_parsed', { body: safeBody(body) });
+
     const email = normalizeEmail(body.email);
     const verificationToken = String(body.verificationToken || '').trim();
 
@@ -33,14 +40,18 @@ export default async function handler(req, res) {
     const authData = await refreshPocketBaseAuth(authToken);
     const record = authData.record;
     const recordEmail = normalizeEmail(record.email);
+    logger.log('pocketbase_auth_refreshed', { userId: record.id, email: maskEmail(recordEmail) });
 
     if (recordEmail !== email) {
+      logger.warn('email_mismatch', { requestedEmail: maskEmail(email), recordEmail: maskEmail(recordEmail), userId: record.id });
       return json(res, 403, { success: false, error: 'The verified email does not match the signed-in user.' });
     }
 
     const tokenRecord = await getVerificationToken('existing-user', verificationToken);
+    logger.log('verification_token_loaded', { email: maskEmail(email), found: Boolean(tokenRecord) });
 
     if (!tokenRecord || tokenRecord.email !== email || tokenRecord.expiresAt <= Date.now()) {
+      logger.warn('verification_token_invalid', { email: maskEmail(email), found: Boolean(tokenRecord) });
       return badRequest(res, 'Email verification expired. Please request a new code.');
     }
 
@@ -52,6 +63,7 @@ export default async function handler(req, res) {
     });
 
     await deleteVerificationToken('existing-user', verificationToken);
+    logger.log('request_success', { userId: record.id, email: maskEmail(email) });
 
     return json(res, 200, {
       success: true,
@@ -61,6 +73,8 @@ export default async function handler(req, res) {
       verifiedAt: verifiedRecord.verifiedAt
     });
   } catch (error) {
+    logger.error('request_failed', error);
+
     if (error.status === 401 || error.status === 403) {
       return json(res, error.status, { success: false, error: 'Invalid PocketBase auth token.' });
     }
