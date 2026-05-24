@@ -1,7 +1,14 @@
 {
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/api/health"
+    }
+  ],
   "functions": {
     "api/*.js": {
       "maxDuration": 10
     }
   }
 }
+
